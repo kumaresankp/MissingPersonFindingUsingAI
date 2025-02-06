@@ -21,7 +21,7 @@ Bharatiya Rescue is an innovative project aimed at leveraging cutting-edge techn
 
 ### Clone the Repository
 ```bash
-git clone https://github.com/kumaresan/MissingPersonFindingUsingAI.git
+git clone https://github.com/kumaresankp/MissingPersonFindingUsingAI.git
 cd MissingPersonFindingUsingAI/core
 ```
 
