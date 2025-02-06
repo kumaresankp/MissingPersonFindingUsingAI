@@ -27,15 +27,8 @@ class MissingPerson(models.Model):
 
 
 
-
-class Location(models.Model):
-    missing_person = models.ForeignKey('MissingPerson', on_delete=models.CASCADE)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6)  # Decimal field for latitude (adjust max_digits and decimal_places as needed)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6)  # Decimal field for longitude (adjust max_digits and decimal_places as needed)
-    detected_at = models.DateTimeField(default=timezone.now)
+class FoundPerson(models.Model):
+    missing_person = models.ForeignKey(MissingPerson, on_delete=models.CASCADE)
 
     def __str__(self):
-        return f"Location for {self.missing_person.first_name} {self.missing_person.last_name}"
-
-    class Meta:
-        ordering = ['-detected_at']  # Show the most recent locations first
+        return f"Found: {self.missing_person.first_name} {self.missing_person.last_name}"

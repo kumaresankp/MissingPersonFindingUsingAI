@@ -9,11 +9,11 @@ import cv2
 from twilio.rest import Client
 from django.shortcuts import get_object_or_404, redirect
 from django.http import HttpResponse
-
+import numpy as np
 #Add yourr own credentials
-account_sid = 'xxxxxxxxxxxxxxxxxxxxxxxxxxx'
-auth_token = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-twilio_whatsapp_number = '+14155238886'
+account_sid = 'ACe2a25987f589b646e9fad8859f1e8f14'
+auth_token = 'de1b84a6c3293c2a80c2976b4943b6b9'
+twilio_whatsapp_number = '+18286629608'
 
 # Create your views here.
 def home(request):
@@ -33,79 +33,106 @@ def send_whatsapp_message(to,context):
     #"We understand the relief this news must bring to you. If you have any further questions or require more information, please do not hesitate to reach out to us.\n\n"
     "Thank you for your cooperation and concern in this matter.\n\n"
     "Sincerely,\n\n"
-    "Team Bharatiya Rescue ")
+    "Team FindMyPerson ")
     message = client.messages.create(
         body=whatsapp_message,
-        from_='whatsapp:' + twilio_whatsapp_number,
-        to='whatsapp:' + to
+        from_=twilio_whatsapp_number,
+        to=to
     )
 
     print(f"WhatsApp message sent: {message.sid}")
- 
+
+
+# Load OpenCV's built-in face detection model (Haar Cascade)
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+# Initialize the LBPH face recognizer
+face_recognizer = cv2.face.LBPHFaceRecognizer_create()
+
+# Store labels and images
+labels = []
+faces = []
+label_dict = {}
+
+
+def train_model():
+    global labels, faces, label_dict
+    labels.clear()
+    faces.clear()
+    label_dict.clear()
+    
+    for idx, person in enumerate(MissingPerson.objects.all()):
+        try:
+            image = cv2.imread(person.image.path, cv2.IMREAD_GRAYSCALE)
+            if image is not None:
+                faces.append(image)
+                labels.append(idx)
+                label_dict[idx] = person  # Store person details
+                print(f"Loaded {person.first_name} {person.last_name}")
+            else:
+                print(f"Warning: Couldn't read image for {person.first_name} {person.last_name}")
+
+        except Exception as e:
+            print(f"Error loading {person.image.path}: {e}")
+
+    if faces:
+        print("Training face recognizer with", len(faces), "faces.")
+        face_recognizer.train(faces, np.array(labels))
+    else:
+        print("No faces found for training!")
+
+train_model()# Train the model before starting detection
+
 def detect(request):
     video_capture = cv2.VideoCapture(0)
-    
-    # Initialize a flag to track if a face has been detected in the current video stream
     face_detected = False
-    
+
     while True:
         ret, frame = video_capture.read()
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # Convert to grayscale
         
-        # Find face locations and encodings in the current frame
-        face_locations = face_recognition.face_locations(frame)
-        face_encodings = face_recognition.face_encodings(frame, face_locations)
-        
-        for face_encoding, (top, right, bottom, left) in zip(face_encodings, face_locations):
-            # Compare detected face with stored face images
-            for person in MissingPerson.objects.all():
-                stored_image = face_recognition.load_image_file(person.image.path)
-                stored_face_encoding = face_recognition.face_encodings(stored_image)[0]
+        # Detect faces in the frame
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
-                # Compare face encodings using a tolerance value
-                #tolerance = 0.6  # Adjust this tolerance as needed
-                matches = face_recognition.compare_faces([stored_face_encoding], face_encoding)
-
-                if any(matches):
-                    name = person.first_name + " " + person.last_name
-                    cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
-                    font = cv2.FONT_HERSHEY_DUPLEX
-                    cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
-
-                    # Check if a face has already been detected in this video stream
+        for (x, y, w, h) in faces:
+            roi_gray = gray[y:y+h, x:x+w]  # Extract face region
+            
+            # Recognize face using LBPH model
+            label, confidence = face_recognizer.predict(roi_gray)
+            
+            if confidence < 80:  # Confidence threshold (adjustable)
+                person = label_dict.get(label, None)
+                if person:
+                    name = f"{person.first_name} {person.last_name}"
+                    
                     if not face_detected:
-                        print("Hi " + name + " is found")
+                        print(f"Hi {name} is found")
                         
-                        current_time = datetime.now().strftime('%d-%m-%Y %H:%M')
-                        subject = 'Missing Person Found'
-                        from_email = 'pptodo01@gmail'
-                        recipientmail = person.email
-                        recipient_phone_number = '+91'+str(person.phone_number)
-                        print(recipient_phone_number)
-                        context = {"first_name":person.first_name,"last_name":person.last_name,
-                                    'fathers_name':person.father_name,"aadhar_number":person.aadhar_number,
-                                    "missing_from":person.missing_from,"date_time":current_time,"location":"India"}
-                        #send_wapmessage(context,current_time,wapnum)
+                        recipient_phone_number = f'+91{person.phone_number}'
+                        context = {
+                            "first_name": person.first_name, "last_name": person.last_name,
+                            "fathers_name": person.father_name, "aadhar_number": person.aadhar_number,
+                            "missing_from": person.missing_from, "date_time": datetime.now().strftime('%d-%m-%Y %H:%M'),
+                            "location": "India"
+                        }
+                        
                         send_whatsapp_message(recipient_phone_number, context)
-                        html_message = render_to_string('findemail.html',context = context)
-                        # Send the email
-                        send_mail(subject,'', from_email, [recipientmail], fail_silently=False, html_message=html_message)
-                        face_detected = True  # Set the flag to True to indicate a face has been detected
-                        break  # Break the loop once a match is found
+                        html_message = render_to_string('findemail.html', context=context)
+                        send_mail('Missing Person Found', '', 'pptodo01@gmail.com', [person.email], 
+                                  fail_silently=False, html_message=html_message)
+                        face_detected = True
 
-            # Check if no face was detected in the current frame
-            if not face_detected:
+            else:
                 name = "Unknown"
-                cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
-                font = cv2.FONT_HERSHEY_DUPLEX
-                cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
 
-        # Display the resulting image
+            # Draw face rectangle
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
+            cv2.putText(frame, name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+
         cv2.imshow('Camera Feed', frame)
-
-        # Hit 'q' on the keyboard to quit!
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-            
+
     video_capture.release()
     cv2.destroyAllWindows()
     return render(request, "surveillance.html")
@@ -182,13 +209,13 @@ def update_person(request, person_id):
         # Retrieve data from the form
         first_name = request.POST.get('first_name', person.first_name)
         last_name = request.POST.get('last_name', person.last_name)
-        fathers_name = request.POST.get('fathers_name', person.fathers_name)
-        dob = request.POST.get('dob', person.dob)
+        fathers_name = request.POST.get('fathers_name', person.father_name)
+        dob = request.POST.get('dob', person.date_of_birth)
         address = request.POST.get('address', person.address)
         email = request.POST.get('email', person.email)
-        phonenum = request.POST.get('phonenum', person.phonenum)
+        phonenum = request.POST.get('phonenum', person.phone_number)
         aadhar_number = request.POST.get('aadhar_number', person.aadhar_number)
-        missing_date = request.POST.get('missing_date', person.missing_date)
+        missing_date = request.POST.get('missing_date', person.missing_from)
         gender = request.POST.get('gender', person.gender)
 
         # Check if a new image is provided
@@ -199,13 +226,13 @@ def update_person(request, person_id):
         # Update the person instance
         person.first_name = first_name
         person.last_name = last_name
-        person.fathers_name = fathers_name
-        person.dob = dob
+        person.father_name = fathers_name
+        person.date_of_birth = dob
         person.address = address
         person.email = email
-        person.phonenum = phonenum
+        person.phone_number = phonenum
         person.aadhar_number = aadhar_number
-        person.missing_date = missing_date
+        person.missing_from = missing_date
         person.gender = gender
 
         # Save the changes
@@ -214,3 +241,7 @@ def update_person(request, person_id):
         return redirect('missing')  # Redirect to the missing view after editing
 
     return render(request, 'edit.html', {'person': person})
+
+
+def found(request):
+    pass

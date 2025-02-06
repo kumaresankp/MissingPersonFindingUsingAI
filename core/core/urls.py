@@ -28,6 +28,7 @@ urlpatterns = [
     path('surveillance/',surveillance,name = 'surveillance'),
     path('register/',register,name='register'),
     path('missing/',missing,name='missing'),
+    path('found/',found,name='found'),
     path('delete/<int:person_id>/',delete_person, name='delete_person'),
     path('update/<int:person_id>/',update_person, name='update_person'),
     path('admin/', admin.site.urls),
