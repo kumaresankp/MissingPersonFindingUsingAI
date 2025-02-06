@@ -11,13 +11,7 @@ Bharatiya Rescue is an innovative project aimed at leveraging cutting-edge techn
 - Integration with advanced AI algorithms and machine learning models for improved face recognition accuracy.
 - Use of geospatial technology for real-time tracking.
 - Integration with social media and public alert systems to increase community response.
-- Collaboration with law enforcement and technology innovators for continuous improvements.
-
-## Other Developers
-- Akash Mohanty
-- Sarin Sahu
-
-
+- Collaboration with law enforcement and technology innovators for continuous improvements
 
 
 ## Getting Started
